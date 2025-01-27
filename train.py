@@ -9,16 +9,17 @@ from data import data_loader as dl
 import argparse
 from util.visualizer import Visualizer
 from IPython import embed
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--datasets', type=str, nargs='+', default=['train/traditional','train/cnn','train/mix'], help='datasets to train on: [train/traditional],[train/cnn],[train/mix],[val/traditional],[val/cnn],[val/color],[val/deblur],[val/frameinterp],[val/superres]')
+parser.add_argument('--datasets', type=str, nargs='+', default=['train/custom'], help='datasets to train on: [train/traditional],[train/cnn],[train/mix],[val/traditional],[val/cnn],[val/color],[val/deblur],[val/frameinterp],[val/superres]')
 parser.add_argument('--model', type=str, default='lpips', help='distance model type [lpips] for linearly calibrated net, [baseline] for off-the-shelf network, [l2] for euclidean distance, [ssim] for Structured Similarity Image Metric')
-parser.add_argument('--net', type=str, default='alex', help='[squeeze], [alex], or [vgg] for network architectures')
-parser.add_argument('--batch_size', type=int, default=50, help='batch size to test image patches in')
+parser.add_argument('--net', type=str, default='vgg', help='[squeeze], [alex], or [vgg] for network architectures')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size to test image patches in')
 parser.add_argument('--use_gpu', action='store_true', help='turn on flag to use GPU')
 parser.add_argument('--gpu_ids', type=int, nargs='+', default=[0], help='gpus to use')
 
-parser.add_argument('--nThreads', type=int, default=4, help='number of threads to use in data loader')
+parser.add_argument('--nThreads', type=int, default=os.cpu_count(), help='number of threads to use in data loader')
 parser.add_argument('--nepoch', type=int, default=5, help='# epochs at base learning rate')
 parser.add_argument('--nepoch_decay', type=int, default=5, help='# additional epochs at linearly learning rate')
 parser.add_argument('--display_freq', type=int, default=5000, help='frequency (in instances) of showing training results on screen')
@@ -58,7 +59,11 @@ total_steps = 0
 fid = open(os.path.join(opt.checkpoints_dir,opt.name,'train_log.txt'),'w+')
 for epoch in range(1, opt.nepoch + opt.nepoch_decay + 1):
     epoch_start_time = time.time()
-    for i, data in enumerate(dataset):
+    # Create progress bar for this epoch
+    pbar = tqdm(enumerate(dataset), total=dataset_size//opt.batch_size, 
+                desc=f'Epoch {epoch}/{opt.nepoch + opt.nepoch_decay}')
+    
+    for i, data in pbar:
         iter_start_time = time.time()
         total_steps += opt.batch_size
         epoch_iter = total_steps - dataset_size * (epoch - 1)

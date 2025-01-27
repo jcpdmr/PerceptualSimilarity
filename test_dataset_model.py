@@ -3,17 +3,18 @@ import lpips
 from data import data_loader as dl
 import argparse
 from IPython import embed
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_mode', type=str, default='2afc', help='[2afc,jnd]')
-parser.add_argument('--datasets', type=str, nargs='+', default=['val/traditional','val/cnn','val/superres','val/deblur','val/color','val/frameinterp'], help='datasets to test - for jnd mode: [val/traditional],[val/cnn]; for 2afc mode: [train/traditional],[train/cnn],[train/mix],[val/traditional],[val/cnn],[val/color],[val/deblur],[val/frameinterp],[val/superres]')
+parser.add_argument('--datasets', type=str, nargs='+', default=['val/custom'], help='datasets to test - for jnd mode: [val/traditional],[val/cnn]; for 2afc mode: [train/traditional],[train/cnn],[train/mix],[val/traditional],[val/cnn],[val/color],[val/deblur],[val/frameinterp],[val/superres]')
 parser.add_argument('--model', type=str, default='lpips', help='distance model type [lpips] for linearly calibrated net, [baseline] for off-the-shelf network, [l2] for euclidean distance, [ssim] for Structured Similarity Image Metric')
-parser.add_argument('--net', type=str, default='alex', help='[squeeze], [alex], or [vgg] for network architectures')
+parser.add_argument('--net', type=str, default='vgg', help='[squeeze], [alex], or [vgg] for network architectures')
 parser.add_argument('--colorspace', type=str, default='Lab', help='[Lab] or [RGB] for colorspace to use for l2, ssim model types')
-parser.add_argument('--batch_size', type=int, default=50, help='batch size to test image patches in')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size to test image patches in')
 parser.add_argument('--use_gpu', action='store_true', help='turn on flag to use GPU')
 parser.add_argument('--gpu_ids', type=int, nargs='+', default=[0], help='gpus to use')
-parser.add_argument('--nThreads', type=int, default=4, help='number of threads to use in data loader')
+parser.add_argument('--nThreads', type=int, default=os.cpu_count(), help='number of threads to use in data loader')
 
 parser.add_argument('--model_path', type=str, default=None, help='location of model, will default to ./weights/v[version]/[net_name].pth')
 
