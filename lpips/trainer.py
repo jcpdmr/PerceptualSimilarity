@@ -99,11 +99,11 @@ class Trainer():
         self.optimizer_net.zero_grad()
         self.backward_train()
         self.optimizer_net.step()
-        self.clamp_weights()
+        # self.clamp_weights()
 
     def clamp_weights(self):
         for module in self.net.modules():
-            if(hasattr(module, 'weight') and module.kernel_size==(1,1)):
+            if isinstance(module, nn.Conv2d) and hasattr(module, 'weight') and module.kernel_size==(1,1):
                 module.weight.data = torch.clamp(module.weight.data,min=0)
 
     def set_input(self, data):
