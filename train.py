@@ -27,7 +27,7 @@ parser.add_argument(
 parser.add_argument(
     "--net",
     type=str,
-    default="vgg",
+    default="yolov11m",
     help="[squeeze], [alex], or [vgg] for network architectures",
 )
 parser.add_argument(
