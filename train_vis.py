@@ -28,8 +28,30 @@ def plot_weight_evolution(attempt, n_epochs, save_path, architecture="vgg"):
     # Create figure
     fig, axs = plt.subplots(n_epochs, n_blocks, figsize=(20, 4 * n_epochs))
     fig.suptitle(
-        f"Evolution of Learned Weights ({architecture.upper()})", fontsize=16, y=1.00
+        f"Evolution of Learned Weights (Lin {architecture.upper()})",
+        fontsize=16,
+        y=1.00,
     )
+
+    # Before the epoch loop, initialize max_weight
+    max_weight = 0
+
+    # First loop to find the global max
+    for epoch in range(1, n_epochs + 1):
+        model_path = f"checkpoints/{attempt}/{epoch}_net_.pth"
+
+        if not os.path.exists(model_path):
+            print(f"Warning: {model_path} not found, skipping...")
+            continue
+
+        state_dict = torch.load(model_path, map_location="cpu")
+
+        # Check each block
+        for block in range(n_blocks):
+            key = f"lin{block}.model.1.weight"
+            w = state_dict[key]
+            w_np = w.squeeze().numpy()
+            max_weight = max(max_weight, np.max(w_np))
 
     # For each epoch
     for epoch in range(1, n_epochs + 1):
@@ -66,6 +88,7 @@ def plot_weight_evolution(attempt, n_epochs, save_path, architecture="vgg"):
                 ax.set_xlabel("Channel number")
 
             ax.grid(True)
+            ax.set_ylim(0, max_weight * 1.05)
 
             # Print statistics
             print(f"Epoch {epoch}, Block {block_names[block]}:")
