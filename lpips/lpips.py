@@ -100,7 +100,7 @@ class LPIPS(nn.Module):
             self.chns = [64, 128, 256, 384, 384, 512, 512]
         elif self.pnet_type == "yolov11m":
             net_type = pn.yolov11m
-            self.chns = [64, 128, 512, 512, 256, 512]
+            self.chns = [64, 128, 256, 512, 512, 512, 256]
         self.L = len(self.chns)
 
         self.net = net_type(pretrained=not self.pnet_rand, requires_grad=self.pnet_tune)
@@ -112,13 +112,12 @@ class LPIPS(nn.Module):
             self.lin3 = NetLinLayer(self.chns[3], use_dropout=use_dropout)
             self.lin4 = NetLinLayer(self.chns[4], use_dropout=use_dropout)
             self.lins = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
-            if self.pnet_type == "squeeze":  # 7 layers for squeezenet
+            if (
+                self.pnet_type == "squeeze" or self.pnet_type == "yolov11m"
+            ):  # 7 layers for squeezenet and yolov11m
                 self.lin5 = NetLinLayer(self.chns[5], use_dropout=use_dropout)
                 self.lin6 = NetLinLayer(self.chns[6], use_dropout=use_dropout)
                 self.lins += [self.lin5, self.lin6]
-            elif self.pnet_type == "yolov11m":  # 6 layers for yolo
-                self.lin5 = NetLinLayer(self.chns[5], use_dropout=use_dropout)
-                self.lins += [self.lin5]
             self.lins = nn.ModuleList(self.lins)
 
             if pretrained:
@@ -143,7 +142,14 @@ class LPIPS(nn.Module):
         if eval_mode:
             self.eval()
 
-    def forward(self, in0, in1, retPerLayer=False, normalize=False):
+    def forward(
+        self,
+        in0,
+        in1,
+        net: str,
+        retPerLayer=False,
+        normalize=False,
+    ):
         if (
             normalize
         ):  # turn on this flag if input is [0,1] so it can be adjusted to [-1, +1]
@@ -151,11 +157,14 @@ class LPIPS(nn.Module):
             in1 = 2 * in1 - 1
 
         # v0.0 - original release had a bug, where input was not scaled
-        in0_input, in1_input = (
-            (self.scaling_layer(in0), self.scaling_layer(in1))
-            if self.version == "0.1"
-            else (in0, in1)
-        )
+        if net == "yolov11m":
+            in0_input, in1_input = in0, in1
+        else:
+            in0_input, in1_input = (
+                (self.scaling_layer(in0), self.scaling_layer(in1))
+                if self.version == "0.1"
+                else (in0, in1)
+            )
         outs0, outs1 = self.net.forward(in0_input), self.net.forward(in1_input)
         feats0, feats1, diffs = {}, {}, {}
 

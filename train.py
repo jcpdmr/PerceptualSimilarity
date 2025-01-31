@@ -113,7 +113,7 @@ trainer = lpips.Trainer()
 trainer.initialize(
     model=opt.model,
     net=opt.net,
-    use_gpu=opt.use_gpu,
+    use_gpu=True,
     is_train=True,
     pnet_rand=opt.from_scratch,
     pnet_tune=opt.train_trunk,
@@ -123,6 +123,7 @@ trainer.initialize(
 # load data from all training sets
 data_loader = dl.CreateDataLoader(
     opt.datasets,
+    model_net=opt.net,
     dataset_mode="2afc",
     batch_size=opt.batch_size,
     serial_batches=False,

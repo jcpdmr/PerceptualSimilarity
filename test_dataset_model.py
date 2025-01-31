@@ -21,7 +21,7 @@ parser.add_argument(
 parser.add_argument(
     "--net",
     type=str,
-    default="vgg",
+    default="yolov11m",
     help="[squeeze], [alex], or [vgg] for network architectures",
 )
 parser.add_argument(
@@ -45,7 +45,7 @@ parser.add_argument(
 parser.add_argument(
     "--model_path",
     type=str,
-    default=None,
+    default="checkpoints/yolov11m_custom0_layers_00_01_02_06_09_10_16/latest_net_.pth",
     help="location of model, will default to ./weights/v[version]/[net_name].pth",
 )
 
@@ -74,7 +74,7 @@ trainer.initialize(
     net=opt.net,
     colorspace=opt.colorspace,
     model_path=opt.model_path,
-    use_gpu=opt.use_gpu,
+    use_gpu=True,
     pnet_rand=opt.from_scratch,
     pnet_tune=opt.train_trunk,
     version=opt.version,
@@ -90,6 +90,7 @@ elif opt.model in ["l2", "ssim"]:
 for dataset in opt.datasets:
     data_loader = dl.CreateDataLoader(
         dataset,
+        model_net=opt.net,
         dataset_mode=opt.dataset_mode,
         batch_size=opt.batch_size,
         nThreads=opt.nThreads,

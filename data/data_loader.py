@@ -1,5 +1,6 @@
 def CreateDataLoader(
     datafolder,
+    model_net: str,
     dataroot="./dataset",
     dataset_mode="2afc",
     load_size=64,
@@ -13,6 +14,7 @@ def CreateDataLoader(
     # print(data_loader.name())
     data_loader.initialize(
         datafolder,
+        model_net=model_net,
         dataroot=dataroot + "/" + dataset_mode,
         dataset_mode=dataset_mode,
         load_size=load_size,

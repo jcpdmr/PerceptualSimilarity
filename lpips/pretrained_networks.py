@@ -1,7 +1,6 @@
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 import torch
 from torchvision import models as tv
-from ultralytics import YOLO
 
 
 class squeezenet(torch.nn.Module):
@@ -189,82 +188,99 @@ class resnet(torch.nn.Module):
         return out
 
 
+class YOLOConfig:
+    """Configuration for YOLO feature extraction layers"""
+
+    def __init__(self, index: int, name: str):
+        self.index = index
+        self.name = name
+
+
 class yolov11m(torch.nn.Module):
-    def __init__(
-        self,
-        requires_grad=False,
-        pretrained=True,
-        weighst_path="./lpips/weights/yolo11m.pt",
-    ):
+    def __init__(self, requires_grad=False, pretrained=True):
+        """Initialize YOLO model for feature extraction.
+
+        Args:
+            requires_grad: If True, enables gradient computation
+            pretrained: If True, loads pretrained weights (currently ignored)
+        """
         super(yolov11m, self).__init__()
 
-        if pretrained:
-            yolo_model = YOLO(weighst_path)
-            # Accessing the model from the ultralytics YOLO object
-            self.model = yolo_model.model.model
-        else:
-            raise ValueError("Only pretrained model is available")
+        if not pretrained:
+            raise ValueError("YOLOv11m only supports pretrained weights")
 
-        # Dictionary to store the features
-        self.features = {}
+        # Define layers to extract features from
+        self.configs = [
+            YOLOConfig(0, "Conv_00"),  # 64 x D/2 x D/2
+            YOLOConfig(1, "Conv_01"),  # 128 x D/4 x D/4
+            YOLOConfig(2, "C3k2_02"),  # 256 x D/4 x D/4
+            YOLOConfig(6, "C3k2_06"),  # 512 x D/16 x D/16
+            YOLOConfig(9, "SPPF_09"),  # 512 x D/32 x D/32
+            YOLOConfig(10, "C2PSA_10"),  # 512 x D/32 x D/32
+            YOLOConfig(16, "C3k2_16"),  # 256 x D/8 x D/8
+        ]
 
-        # Hook for needed layers
+        self.features = OrderedDict()
+        self.N_slices = len(self.configs)
+
+        # Initialize normalization layers -> not needed for Yolo?
+        # self.register_buffer(
+        #     "shift", torch.Tensor([-0.030, -0.088, -0.188])[None, :, None, None]
+        # )
+        # self.register_buffer(
+        #     "scale", torch.Tensor([0.458, 0.448, 0.450])[None, :, None, None]
+        # )
+
+        # Initialize YOLO model
+        from ultralytics import YOLO
+
+        self.yolo = YOLO("./lpips/weights/yolo11m.pt", verbose=False)
+        self.yolo.model.eval()
+
+        # Register hooks for feature extraction
         self.hooks = []
-        self._register_hooks()
+        for config in self.configs:
+            layer = self.yolo.model.model[config.index]
+            hook = layer.register_forward_hook(self._hook_fn(config.name))
+            self.hooks.append(hook)
 
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
 
-    def _register_hooks(self):
-        def get_activation(name):
-            def hook(model, input, output):
-                self.features[name] = output
+    def _hook_fn(self, name: str):
+        """Create hook function for storing features"""
 
-            return hook
+        def hook(module, input, output):
+            # print(f"{module} : {output.clone().detach()}")
+            self.features[name] = output.clone().detach()
 
-        # Registering hooks for the needed layers
-        self.hooks.append(
-            self.model[0].register_forward_hook(get_activation("conv1"))
-        )  # Conv 64x160x160
-        self.hooks.append(
-            self.model[1].register_forward_hook(get_activation("conv2"))
-        )  # Conv 128x80x80
-        self.hooks.append(
-            self.model[6].register_forward_hook(get_activation("c3k2_1"))
-        )  # C3k2 512x20x20
-        self.hooks.append(
-            self.model[10].register_forward_hook(get_activation("c2psa"))
-        )  # C2PSA 512x10x10
-        self.hooks.append(
-            self.model[16].register_forward_hook(get_activation("c3k2_2"))
-        )  # C3k2 256x40x40
-        self.hooks.append(
-            self.model[22].register_forward_hook(get_activation("c3k2_3"))
-        )  # C3k2 512x10x10
+        return hook
 
     def forward(self, x):
-        # Clear the features dictionary
+        """Extract features from input tensor.
+
+        Args:
+            x: Input tensor of shape [batch_size, channels, height, width]
+            normalize: If True, normalizes input to match LPIPS expectations
+
+        Returns:
+            Named tuple containing features from each target layer
+        """
+        # Clear previous features
         self.features.clear()
 
-        # Forward pass through the YOLO model
-        self.model(x)
+        # Run forward pass
+        with torch.no_grad():
+            self.yolo.predict(x, verbose=False)
 
-        outputs = namedtuple(
-            "YOLOOutputs", ["conv1", "conv2", "c3k2_1", "c2psa", "c3k2_2", "c3k2_3"]
-        )
-        out = outputs(
-            self.features["conv1"],
-            self.features["conv2"],
-            self.features["c3k2_1"],
-            self.features["c2psa"],
-            self.features["c3k2_2"],
-            self.features["c3k2_3"],
-        )
+        # Create named tuple with features
+        YOLOOutputs = namedtuple("YOLOOutputs", [cfg.name for cfg in self.configs])
+        out = YOLOOutputs(*[self.features[cfg.name] for cfg in self.configs])
 
         return out
 
     def __del__(self):
-        # Remove the hooks when the object is deleted
+        """Cleanup hooks on deletion"""
         for hook in self.hooks:
             hook.remove()

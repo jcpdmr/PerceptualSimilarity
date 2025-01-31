@@ -56,6 +56,7 @@ class Trainer:
         self.is_train = is_train
         self.spatial = spatial
         self.model_name = "%s [%s]" % (model, net)
+        self.original_net = net
 
         if self.model == "lpips":  # pretrained net + linear layer
             self.net = lpips.LPIPS(
@@ -95,7 +96,8 @@ class Trainer:
                 self.parameters, lr=lr, betas=(beta1, 0.999)
             )
         else:  # test mode
-            self.net.eval()
+            if self.original_net != "yolov11m":
+                self.net.eval()
 
         if use_gpu:
             self.net.to(gpu_ids[0])
@@ -118,7 +120,9 @@ class Trainer:
             computed distances between in0 and in1
         """
 
-        return self.net.forward(in0, in1, retPerLayer=retPerLayer)
+        return self.net.forward(
+            in0, in1, retPerLayer=retPerLayer, net=self.original_net
+        )
 
     # ***** TRAINING FUNCTIONS *****
     def optimize_parameters(self):
@@ -272,6 +276,7 @@ def score_2afc_dataset(data_loader, func, name=""):
     d1s = np.array(d1s)
     gts = np.array(gts)
     scores = (d0s < d1s) * (1.0 - gts) + (d1s < d0s) * gts + (d1s == d0s) * 0.5
+    print({"d0s": d0s, "d1s": d1s, "gts": gts, "scores": scores})
 
     return (np.mean(scores), dict(d0s=d0s, d1s=d1s, gts=gts, scores=scores))
 
