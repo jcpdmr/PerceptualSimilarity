@@ -1,13 +1,14 @@
 import json
 
-path = "checkpoints/vgg_custom0"
+dataset_h_values_path = "dataset/2afc/h_values_with_swap.json"
+path = "checkpoints/vgg_LPIPS_pretrained"
 
 # Read the two JSON files
 with open(f"{path}/val_results_verbose.json", "r") as f:
     val_results = json.load(f)
     val_results = val_results["results"]  # Access the nested "results" key
 
-with open(f"{path}/h_values_with_swap.json", "r") as f:
+with open(f"{dataset_h_values_path}", "r") as f:
     h_values = json.load(f)
 
 # Create the new dictionary

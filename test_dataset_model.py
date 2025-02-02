@@ -114,7 +114,7 @@ for dataset in opt.datasets:
     json.dump(
         results_verbose,
         open(
-            os.path.join(save_dir, "SSIM_val_results_verbose.json"),
+            os.path.join(save_dir, "val_results_verbose.json"),
             "w+",
         ),
         indent=4,
