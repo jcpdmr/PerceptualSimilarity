@@ -153,6 +153,14 @@ class Trainer:
         self.var_p0 = Variable(self.input_p0, requires_grad=True)
         self.var_p1 = Variable(self.input_p1, requires_grad=True)
 
+        # # Save image for debug
+        # import torchvision
+
+        # for i, path in enumerate(data["p1_path"]):
+        #     number = path.split("/")[-1].split(".")[0]
+        #     torchvision.utils.save_image(self.var_p1[i], f"debug/p1/{number}.png")
+        #     torchvision.utils.save_image(self.var_p0[i], f"debug/p0/{number}.png")
+
     def forward_train(self):  # run forward pass
         self.d0 = self.forward(self.var_ref, self.var_p0)
         self.d1 = self.forward(self.var_ref, self.var_p1)
@@ -254,31 +262,47 @@ def score_2afc_dataset(data_loader, func, name=""):
     OUTPUTS
         [0] - 2AFC score in [0,1], fraction of time func agrees with human evaluators
         [1] - dictionary with following elements
-            d0s,d1s - N arrays containing distances between reference patch to perturbed patches
-            gts - N array in [0,1], preferred patch selected by human evaluators
-                (closer to "0" for left patch p0, "1" for right patch p1,
-                "0.6" means 60pct people preferred right patch, 40pct preferred left)
-            scores - N array in [0,1], corresponding to what percentage function agreed with humans
-    CONSTS
-        N - number of test triplets in data_loader
+            results - Dictionary with image names as keys, containing d0,d1,h values
+            mean_score - The average score across all images
     """
 
     d0s = []
     d1s = []
     gts = []
+    paths = []
 
     for data in tqdm(data_loader.load_data(), desc=name):
         d0s += func(data["ref"], data["p0"]).data.cpu().numpy().flatten().tolist()
         d1s += func(data["ref"], data["p1"]).data.cpu().numpy().flatten().tolist()
         gts += data["judge"].cpu().numpy().flatten().tolist()
 
+        # Extract image name from path
+        paths += [os.path.basename(p) for p in data["p0_path"]]
+
     d0s = np.array(d0s)
     d1s = np.array(d1s)
     gts = np.array(gts)
     scores = (d0s < d1s) * (1.0 - gts) + (d1s < d0s) * gts + (d1s == d0s) * 0.5
-    print({"d0s": d0s, "d1s": d1s, "gts": gts, "scores": scores})
+    paths = np.array(paths)
 
-    return (np.mean(scores), dict(d0s=d0s, d1s=d1s, gts=gts, scores=scores))
+    # Calculate final score
+    mean_score = float(np.mean(scores))
+
+    # Create per-image results dictionary with mean score
+    results = {
+        "mean_score": mean_score,  # Add mean score at the top level
+        "results": {}  # Nested dictionary for individual results
+    }
+    
+    for i, path in enumerate(paths):
+        results["results"][path] = {
+            "d0": float(d0s[i]),
+            "d1": float(d1s[i]),
+            "h (gt)": float(gts[i]),
+            "score": float(scores[i]),
+        }
+
+    return (mean_score, results)
 
 
 def score_jnd_dataset(data_loader, func, name=""):

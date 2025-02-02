@@ -2,6 +2,7 @@ import lpips
 from data import data_loader as dl
 import argparse
 import os
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset_mode", type=str, default="2afc", help="[2afc,jnd]")
@@ -45,7 +46,7 @@ parser.add_argument(
 parser.add_argument(
     "--model_path",
     type=str,
-    default="checkpoints/yolov11m_custom0_layers_00_01_02_06_09_10_16/latest_net_.pth",
+    default="lpips/weights/v0.1/vgg.pth",  # checkpoints/yolov11m_custom0_layers_00_01_02_06_09_10_16/latest_net_.pth
     help="location of model, will default to ./weights/v[version]/[net_name].pth",
 )
 
@@ -81,8 +82,8 @@ trainer.initialize(
     gpu_ids=opt.gpu_ids,
 )
 
-if opt.model in ["net-lin", "net"]:
-    print("Testing model [%s]-[%s]" % (opt.model, opt.net))
+if opt.model in ["lpips", "baseline"]:
+    print("Testing model [%s]-[%s]-[%s]" % (opt.model, opt.net, opt.model_path))
 elif opt.model in ["l2", "ssim"]:
     print("Testing model [%s]-[%s]" % (opt.model, opt.colorspace))
 
@@ -108,3 +109,13 @@ for dataset in opt.datasets:
 
     # print results
     print("  Dataset [%s]: %.2f" % (dataset, 100.0 * score))
+    save_dir = os.path.dirname(opt.model_path)
+    print(f" Saving results to {save_dir}")
+    json.dump(
+        results_verbose,
+        open(
+            os.path.join(save_dir, "SSIM_val_results_verbose.json"),
+            "w+",
+        ),
+        indent=4,
+    )

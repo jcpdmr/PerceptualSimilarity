@@ -9,9 +9,14 @@ import torch
 
 
 class TwoAFCDataset(BaseDataset):
-    def initialize(self, dataroots, load_size=64, net_model="yolov11m"):
+    def initialize(
+        self,
+        dataroots,
+        model_net: str,
+        load_size=64,
+    ):
         print(
-            f"TwoAFCDataset initialize -> img size: {load_size}, model: {net_model} (used for image transformation during loading)"
+            f"TwoAFCDataset initialize -> img size: {load_size}, model: {model_net} (used for image transformation during loading)"
         )
         if not isinstance(dataroots, list):
             dataroots = [
@@ -39,7 +44,7 @@ class TwoAFCDataset(BaseDataset):
             [
                 transforms.ToTensor(),  # ensure the image is in the range [0,1]
             ]
-            if net_model == "yolov11m"
+            if model_net == "yolov11m"
             else [
                 transforms.ToTensor(),
                 transforms.Normalize(

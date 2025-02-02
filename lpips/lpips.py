@@ -165,7 +165,16 @@ class LPIPS(nn.Module):
                 if self.version == "0.1"
                 else (in0, in1)
             )
+        # print(
+        #     f"in0_input: {in0_input.shape}, max: {in0_input.max()}, min: {in0_input.min()} , in0_input: {in0_input}"
+        # )
+        # print(
+        #     f"in1_input: {in1_input.shape}, max: {in1_input.max()}, min: {in1_input.min()}, in1_input: {in1_input}"
+        # )
         outs0, outs1 = self.net.forward(in0_input), self.net.forward(in1_input)
+        # for kk in range(self.L):
+        #     print(f"outs0: {outs0[kk]}, max: {outs0[kk].max()}, min: {outs0[kk].min()}")
+        #     print(f"outs1: {outs1[kk]}, max: {outs1[kk].max()}, min: {outs1[kk].min()}")
         feats0, feats1, diffs = {}, {}, {}
 
         for kk in range(self.L):
@@ -299,7 +308,7 @@ class FakeNet(nn.Module):
 
 
 class L2(FakeNet):
-    def forward(self, in0, in1, retPerLayer=None):
+    def forward(self, in0, in1, retPerLayer=None, net=None):
         assert in0.size()[0] == 1  # currently only supports batchSize 1
 
         if self.colorspace == "RGB":
@@ -324,7 +333,7 @@ class L2(FakeNet):
 
 
 class DSSIM(FakeNet):
-    def forward(self, in0, in1, retPerLayer=None):
+    def forward(self, in0, in1, retPerLayer=None, net=None):
         assert in0.size()[0] == 1  # currently only supports batchSize 1
 
         if self.colorspace == "RGB":

@@ -21,8 +21,9 @@ def psnr(p0, p1, peak=255.):
     return 10*np.log10(peak**2/np.mean((1.*p0-1.*p1)**2))
 
 def dssim(p0, p1, range=255.):
-    from skimage.measure import compare_ssim
-    return (1 - compare_ssim(p0, p1, data_range=range, multichannel=True)) / 2.
+    from skimage.metrics import structural_similarity as compare_ssim
+    # print(f"p0: {p0.shape}")
+    return (1 - compare_ssim(p0, p1, data_range=range, channel_axis=2)) / 2.
 
 def tensor2np(tensor_obj):
     # change dimension of a tensor object into a numpy array

@@ -13,7 +13,7 @@ def CreateDataset(
     if dataset_mode == "2afc":  # human judgements
         from data.dataset.twoafc_dataset import TwoAFCDataset
 
-        dataset = TwoAFCDataset(model_net=model_net)
+        dataset = TwoAFCDataset()
     elif dataset_mode == "jnd":  # human judgements
         from data.dataset.jnd_dataset import JNDDataset
 
@@ -21,7 +21,7 @@ def CreateDataset(
     else:
         raise ValueError("Dataset Mode [%s] not recognized." % dataset_mode)
 
-    dataset.initialize(dataroots=dataroots, load_size=load_size)
+    dataset.initialize(dataroots=dataroots, load_size=load_size, model_net=model_net)
     return dataset
 
 
