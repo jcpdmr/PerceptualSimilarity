@@ -2,12 +2,146 @@ from __future__ import absolute_import
 
 import numpy as np
 import torch
+import torch.nn as nn
 from collections import OrderedDict
 from torch.autograd import Variable
 from scipy.ndimage import zoom
 from tqdm import tqdm
 import lpips
 import os
+
+
+def smooth_l1_loss(true_diff, pred_diff, beta=1.0):
+    diff = torch.abs(true_diff - pred_diff)
+    return torch.where(diff < beta, 0.5 * diff * diff / beta, diff - 0.5 * beta)
+
+
+class CustomLossWithNet(nn.Module):
+    def __init__(self, alpha=0.4, beta=0.5, gamma=0.1, chn_mid=32):
+        super(CustomLossWithNet, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+
+        # Rete G che prende due distanze e produce uno score
+        self.net = nn.Sequential(
+            nn.Conv2d(5, chn_mid, 1, stride=1, padding=0, bias=True),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(chn_mid, chn_mid, 1, stride=1, padding=0, bias=True),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(chn_mid, 1, 1, stride=1, padding=0, bias=True),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, d0, d1, e0, e1, eps=0.1):
+        # Usa la rete G per predire la probabilità che d1 sia migliore di d0
+        score = self.net(
+            torch.cat((d0, d1, d0 - d1, d0 / (d1 + eps), d1 / (d0 + eps)), dim=1)
+        )
+
+        # 1. Ordering loss usando il punteggio predetto dalla rete
+        h = (e0 > e1).float()
+        ordering_loss = -h * torch.log(score) - (1 - h) * torch.log(1 - score)
+
+        # 2. Normalized magnitude loss (come prima)
+        true_diffs = e0 - e1
+        pred_diffs = d0 - d1
+        true_diffs_norm = (true_diffs - true_diffs.mean()) / (true_diffs.std() + 1e-8)
+        pred_diffs_norm = (pred_diffs - pred_diffs.mean()) / (pred_diffs.std() + 1e-8)
+        magnitude_loss = smooth_l1_loss(true_diffs_norm, pred_diffs_norm, beta=1.0)
+
+        # 3. Regularization
+        reg_loss = torch.mean(d0**2 + d1**2)
+
+        return (
+            self.alpha * ordering_loss
+            + self.beta * magnitude_loss
+            + self.gamma * reg_loss
+        )
+
+
+class RankingLoss(nn.Module):
+    """
+    A modified ranking loss that considers both order and magnitude of differences
+    between perceptual distances and detection error scores.
+    """
+
+    def __init__(self, order_weight=0.4, magnitude_weight=0.6):
+        super(RankingLoss, self).__init__()
+        self.order_weight = order_weight
+        self.magnitude_weight = magnitude_weight
+        self.net = ModifiedDist2LogitLayer()
+
+    def forward(self, scaled_distances, e0, e1):
+        """
+        Args:
+            scaled_distances: Output from Dist2LogitLayer containing scaled perceptual distances
+            e0, e1: Detection error scores (ground truth)
+
+        Returns:
+            Loss tensor without reduction, to be averaged during backward pass
+        """
+        # Extract d0 and d1 from scaled_distances
+        d0 = scaled_distances[:, 0:1, :, :]  # First channel
+        d1 = scaled_distances[:, 1:2, :, :]  # Second channel
+
+        # Compute differences
+        pred_diff = d0 - d1
+        true_diff = e0 - e1
+
+        # Sigmoid-based smooth approximation of sign agreement
+        # pred and true with same sign -> sigmoid(-value) -> order_loss close to zero
+        # pred and true with different sign -> sigmoid(value) -> order_loss close to one
+
+        order_loss = torch.sigmoid(-pred_diff * true_diff * 100.0)
+
+        # Compute magnitude loss using relative differences
+        pred_abs_diff = torch.abs(pred_diff)
+        true_abs_diff = torch.abs(true_diff)
+
+        # Handle edge cases where true difference is very small
+        eps = 1e-8
+        scale_ratio = torch.min(
+            pred_abs_diff / (true_abs_diff + eps), true_abs_diff / (pred_abs_diff + eps)
+        )
+        magnitude_loss = 1.0 - scale_ratio
+
+        # Combine losses with weights without reduction
+        return self.order_weight * order_loss + self.magnitude_weight * magnitude_loss
+
+
+class ModifiedDist2LogitLayer(nn.Module):
+    """
+    Modified version of the Dist2LogitLayer that outputs scaled distances.
+    The network takes raw LPIPS distances and learns to scale them to match
+    the range and distribution of the detection error scores.
+    """
+
+    def __init__(self, chn_mid=32):
+        super(ModifiedDist2LogitLayer, self).__init__()
+
+        # Network to process both distances together
+        self.model = nn.Sequential(
+            # Initial processing
+            nn.Conv2d(6, chn_mid, 1, stride=1, padding=0, bias=True),
+            nn.LeakyReLU(0.2, True),
+            # Hidden layer
+            nn.Conv2d(chn_mid, chn_mid, 1, stride=1, padding=0, bias=True),
+            nn.LeakyReLU(0.2, True),
+            # Output layer - 2 channels for d0 and d1
+            nn.Conv2d(chn_mid, 2, 1, stride=1, padding=0, bias=True),
+        )
+
+    def forward(self, d0, d1, eps=1e-8):
+        """
+        Takes two distance tensors and returns their scaled versions
+        """
+        # Concatenate distances along channel dimension
+        distances = torch.cat(
+            (d0, d1, d0 - d1, abs(d0 - d1), d0 / (d1 + eps), d1 / (d0 + eps)), dim=1
+        )
+        # Process and output scaled distances
+        return self.model(distances)
 
 
 class Trainer:
@@ -30,6 +164,9 @@ class Trainer:
         beta1=0.5,
         version="0.1",
         gpu_ids=[0],
+        a=0.4,
+        b=0.5,
+        c=0.1,
     ):
         """
         INPUTS
@@ -88,7 +225,7 @@ class Trainer:
 
         if self.is_train:  # training mode
             # extra network on top to go from distances (d0,d1) => predicted human judgment (h*)
-            self.rankLoss = lpips.BCERankingLoss()
+            self.rankLoss = RankingLoss()
             self.parameters += list(self.rankLoss.net.parameters())
             self.lr = lr
             self.old_lr = lr
@@ -141,17 +278,23 @@ class Trainer:
         self.input_ref = data["ref"]
         self.input_p0 = data["p0"]
         self.input_p1 = data["p1"]
-        self.input_judge = data["judge"]
+        # self.input_judge = data["judge"]
+        self.input_e0 = data["e0"]
+        self.input_e1 = data["e1"]
 
         if self.use_gpu:
             self.input_ref = self.input_ref.to(device=self.gpu_ids[0])
             self.input_p0 = self.input_p0.to(device=self.gpu_ids[0])
             self.input_p1 = self.input_p1.to(device=self.gpu_ids[0])
-            self.input_judge = self.input_judge.to(device=self.gpu_ids[0])
+            # self.input_judge = self.input_judge.to(device=self.gpu_ids[0])
+            self.input_e0 = self.input_e0.to(device=self.gpu_ids[0])
+            self.input_e1 = self.input_e1.to(device=self.gpu_ids[0])
 
         self.var_ref = Variable(self.input_ref, requires_grad=True)
         self.var_p0 = Variable(self.input_p0, requires_grad=True)
         self.var_p1 = Variable(self.input_p1, requires_grad=True)
+        self.var_e0 = Variable(self.input_e0)
+        self.var_e1 = Variable(self.input_e1)
 
         # # Save image for debug
         # import torchvision
@@ -162,17 +305,40 @@ class Trainer:
         #     torchvision.utils.save_image(self.var_p0[i], f"debug/p0/{number}.png")
 
     def forward_train(self):  # run forward pass
-        self.d0 = self.forward(self.var_ref, self.var_p0)
-        self.d1 = self.forward(self.var_ref, self.var_p1)
-        self.acc_r = self.compute_accuracy(self.d0, self.d1, self.input_judge)
+        """
+        Forward pass during training
 
-        self.var_judge = Variable(1.0 * self.input_judge).view(self.d0.size())
+        Args:
+            data: Dictionary containing:
+                - ref: Reference image
+                - p0: First distorted image
+                - p1: Second distorted image
+                - error_score0: Detection error score for p0
+                - error_score1: Detection error score for p1
+        """
+        # Get raw perceptual distances from LPIPS
+        raw_d0 = self.net.forward(self.var_ref, self.var_p0, self.original_net)
+        raw_d1 = self.net.forward(self.var_ref, self.var_p1, self.original_net)
 
-        self.loss_total = self.rankLoss.forward(
-            self.d0, self.d1, self.var_judge * 2.0 - 1.0
-        )
+        # Scale distances using Dist2LogitLayer
+        scaled_distances = self.rankLoss.net.forward(raw_d0, raw_d1)
 
-        return self.loss_total
+        # Compute loss using scaled distances
+        self.loss_total = self.rankLoss(scaled_distances, self.var_e0, self.var_e1)
+
+        # Extract scaled distances for monitoring
+        d0 = scaled_distances[:, 0:1, :, :]
+        d1 = scaled_distances[:, 1:2, :, :]
+        self.acc_r = self.compute_accuracy(d0, d1, self.var_e0 < self.var_e1)
+
+        return {
+            "raw_d0": raw_d0.detach(),
+            "raw_d1": raw_d1.detach(),
+            "scaled_d0": d0.detach(),
+            "scaled_d1": d1.detach(),
+            "e0": self.var_e0.detach(),
+            "e1": self.var_e1.detach(),
+        }
 
     def backward_train(self):
         torch.mean(self.loss_total).backward()
@@ -291,9 +457,9 @@ def score_2afc_dataset(data_loader, func, name=""):
     # Create per-image results dictionary with mean score
     results = {
         "mean_score": mean_score,  # Add mean score at the top level
-        "results": {}  # Nested dictionary for individual results
+        "results": {},  # Nested dictionary for individual results
     }
-    
+
     for i, path in enumerate(paths):
         results["results"][path] = {
             "d0": float(d0s[i]),

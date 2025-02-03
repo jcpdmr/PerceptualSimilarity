@@ -60,6 +60,16 @@ class TwoAFCDataset(BaseDataset):
         self.judge_paths = make_dataset(self.dir_J, mode="np")
         self.judge_paths = sorted(self.judge_paths)
 
+        # e0 directory
+        self.dir_e0 = [os.path.join(root, "e0") for root in self.roots]
+        self.e0_paths = make_dataset(self.dir_e0, mode="np")
+        self.e0_paths = sorted(self.e0_paths)
+
+        # e1 directory
+        self.dir_e1 = [os.path.join(root, "e1") for root in self.roots]
+        self.e1_paths = make_dataset(self.dir_e1, mode="np")
+        self.e1_paths = sorted(self.e1_paths)
+
     def __getitem__(self, index):
         p0_path = self.p0_paths[index]
         p0_img_ = Image.open(p0_path).convert("RGB")
@@ -87,14 +97,35 @@ class TwoAFCDataset(BaseDataset):
                 1,
             )
         )  # [0,1]
-
         judge_img = torch.FloatTensor(judge_img)
+
+        e0_path = self.e0_paths[index]
+        e0_img = np.load(e0_path).reshape(
+            (
+                1,
+                1,
+                1,
+            )
+        )  # [0,1]
+        e0_img = torch.FloatTensor(e0_img)
+
+        e1_path = self.e1_paths[index]
+        e1_img = np.load(e1_path).reshape(
+            (
+                1,
+                1,
+                1,
+            )
+        )  # [0,1]
+        e1_img = torch.FloatTensor(e1_img)
 
         return {
             "p0": p0_img,
             "p1": p1_img,
             "ref": ref_img,
             "judge": judge_img,
+            "e0": e0_img,
+            "e1": e1_img,
             "p0_path": p0_path,
             "p1_path": p1_path,
             "ref_path": ref_path,

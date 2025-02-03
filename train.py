@@ -31,7 +31,7 @@ parser.add_argument(
     help="[squeeze], [alex], or [vgg] for network architectures",
 )
 parser.add_argument(
-    "--batch_size", type=int, default=50, help="batch size to test image patches in"
+    "--batch_size", type=int, default=100, help="batch size to test image patches in"
 )
 parser.add_argument("--use_gpu", action="store_true", help="turn on flag to use GPU")
 parser.add_argument("--gpu_ids", type=int, nargs="+", default=[0], help="gpus to use")

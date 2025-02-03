@@ -183,8 +183,8 @@ def plot_training_progress(input_path, save_path):
 
 if __name__ == "__main__":
     # Attempt
-    architecture = "yolov11m"
-    attempt = "custom1_layers_00_01_02_06_09_10_16"
+    architecture = "vgg"
+    attempt = "customLoss0"
 
     base_output_dir = "output"
     if not os.path.exists(base_output_dir):

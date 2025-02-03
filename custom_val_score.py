@@ -86,5 +86,5 @@ def process_results(input_path, output_path, order_weight=0.7, magnitude_weight=
 # Example usage
 if __name__ == '__main__':
     input_path = 'checkpoints/vgg_LPIPS_pretrained'
-    output = process_results(input_path=f"{input_path}/deswapped_results.json", output_path=input_path)
+    output = process_results(input_path=f"{input_path}/deswapped_results.json", output_path=input_path, order_weight=0.4, magnitude_weight=0.6)
     print(f"Mean validation score: {output['mean_custom_val_score']:.4f}")
